@@ -4,5 +4,26 @@
   "main": "worker.mjs",
   "compatibility_date": "2026-11-19",
   "workers_dev": true,
-  "vars": { "ALLOWED_ORIGIN": "https://rockky666.github.io" }
+  "vars": {
+    "ALLOWED_ORIGIN": "https://rockky666.github.io",
+    "TIKTOK_CLIENT_KEY": "sbawgcg7ufolbtr27p",
+    "TIKTOK_REDIRECT_URI": "https://pulse-api.gromagnetik.workers.dev/auth/tiktok/callback",
+    "TIKTOK_SCOPES": "user.info.basic,user.info.profile,user.info.stats,video.list"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "TIKTOK_STORE",
+        "class_name": "TikTokStore"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "tiktok-v1",
+      "new_sqlite_classes": [
+        "TikTokStore"
+      ]
+    }
+  ]
 }

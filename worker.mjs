@@ -1,3 +1,5 @@
+import { callbackPage } from './tiktok.mjs';
+export { TikTokStore } from './tiktok.mjs';
 // Pulse personal API. Deploy as a Cloudflare Worker ES module.
 // Required bindings: ALLOWED_ORIGIN (text), YOUTUBE_API_KEY and PULSE_ACCESS_TOKEN (secrets).
 const json = (body, status, headers={}) => new Response(JSON.stringify(body), {status, headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',...headers}});
@@ -40,14 +42,18 @@ export async function youtubeSnapshot(channelUrl,key,fetcher=fetch){
 export default {
   async fetch(request,env){
     const path=new URL(request.url).pathname;
-    if(request.method==='GET'&&path==='/health')return json({ok:true,service:'pulse-api'},200);
+    if(request.method==='GET'&&path==='/health')return json({ok:true,service:'pulse-api',version:2,tiktokReady:!!(env.TIKTOK_STORE&&env.TIKTOK_CLIENT_KEY&&env.TIKTOK_CLIENT_SECRET&&env.TIKTOK_REDIRECT_URI)},200);
+    if(path==='/auth/tiktok/callback'){
+      if(request.method!=='GET'||!env.TIKTOK_STORE||!env.TIKTOK_CLIENT_SECRET)return callbackPage(false);
+      return env.TIKTOK_STORE.get(env.TIKTOK_STORE.idFromName('personal')).fetch(request);
+    }
     const origin=request.headers.get('Origin');
     if(!env.ALLOWED_ORIGIN||origin!==env.ALLOWED_ORIGIN)return json({error:'Источник запроса не разрешён.'},403);
     const cors={'Access-Control-Allow-Origin':env.ALLOWED_ORIGIN,'Vary':'Origin','Access-Control-Allow-Methods':'POST, OPTIONS','Access-Control-Allow-Headers':'Authorization, Content-Type','Access-Control-Max-Age':'600'};
     if(request.method==='OPTIONS')return new Response(null,{status:204,headers:cors});
-    if(path!=='/api/youtube/sync')return json({error:'Маршрут не найден.'},404,cors);
+    if(!['/api/youtube/sync','/api/tiktok/connect','/api/tiktok/complete','/api/tiktok/sync','/api/tiktok/disconnect','/api/tiktok/status'].includes(path))return json({error:'Маршрут не найден.'},404,cors);
     if(request.method!=='POST')return json({error:'Используйте POST.'},405,cors);
-    if(!env.PULSE_ACCESS_TOKEN||env.PULSE_ACCESS_TOKEN.length<32||!env.YOUTUBE_API_KEY)return json({error:'Не настроены секреты Worker: YOUTUBE_API_KEY и PULSE_ACCESS_TOKEN (минимум 32 символа).'},503,cors);
+    if(!env.PULSE_ACCESS_TOKEN||env.PULSE_ACCESS_TOKEN.length<32)return json({error:'Не настроен PULSE_ACCESS_TOKEN (минимум 32 символа).'},503,cors);
     if(request.headers.get('Authorization')!=='Bearer '+env.PULSE_ACCESS_TOKEN)return json({error:'Неверный код доступа Pulse.'},401,cors);
     if(!request.headers.get('Content-Type')?.includes('application/json'))return json({error:'Нужен JSON.'},415,cors);
     try{
@@ -56,6 +62,13 @@ export default {
       while(true){const {done,value}=await reader.read();if(done)break;bytes+=value.length;if(bytes>4096){await reader.cancel();throw new ApiError('Слишком большой запрос.',413)}chunks.push(value)}
       const buffer=new Uint8Array(bytes);let offset=0;for(const chunk of chunks){buffer.set(chunk,offset);offset+=chunk.length}
       let body;try{body=JSON.parse(new TextDecoder().decode(buffer))}catch{throw new ApiError('Неверный JSON.')}
+      if(path==='/api/tiktok/status')return json({ready:!!(env.TIKTOK_STORE&&env.TIKTOK_CLIENT_KEY&&env.TIKTOK_CLIENT_SECRET&&env.TIKTOK_REDIRECT_URI),clientKey:env.TIKTOK_CLIENT_KEY||'',redirectUri:env.TIKTOK_REDIRECT_URI||''},200,cors);
+      if(path.startsWith('/api/tiktok/')){
+        if(!env.TIKTOK_STORE||!env.TIKTOK_CLIENT_KEY||!env.TIKTOK_CLIENT_SECRET||!env.TIKTOK_REDIRECT_URI)return json({error:'TikTok не настроен: разверните актуальный код Worker и добавьте TIKTOK_CLIENT_SECRET.'},503,cors);
+        const r=await env.TIKTOK_STORE.get(env.TIKTOK_STORE.idFromName('personal')).fetch(new Request('https://internal'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}));
+        return new Response(r.body,{status:r.status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store',...cors}});
+      }
+      if(!env.YOUTUBE_API_KEY)return json({error:'Добавьте YOUTUBE_API_KEY в секреты Worker.'},503,cors);
       if(typeof body?.channelUrl!=='string'||body.channelUrl.length>500)throw new ApiError('Укажите channelUrl.');
       return json(await youtubeSnapshot(body.channelUrl,env.YOUTUBE_API_KEY),200,cors);
     }catch(e){return json({error:e instanceof ApiError?e.message:'Не удалось получить данные. Повторите позже.'},e instanceof ApiError?e.status:502,cors)}
