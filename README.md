@@ -1,2 +1,24 @@
-# pulse-channel-monitor
-Personal channel dashboard for YouTube, Instagram and TikTok
+# Pulse — мониторинг каналов
+
+**Сайт:** https://rockky666.github.io/pulse-channel-monitor/
+
+Личный обзор групп каналов YouTube, Instagram и TikTok: сводные метрики, публикации, выбор платформы, поиск и экспорт/импорт JSON.
+
+- `index.html`, `app.js`, `style.css` — статический фронтенд для GitHub Pages, без сборки.
+- `worker.mjs` — сервер для Cloudflare Workers, который получает публичную статистику YouTube и до 50 последних видео по кнопке.
+- [BACKEND-RU.md](BACKEND-RU.md) — пошаговое подключение Cloudflare и YouTube API.
+
+Фронтенд публичный. Пользовательские группы сохраняются только в браузере. Google API key хранится в секрете Cloudflare, а не в клиентском коде. Код доступа Pulse вводится пользователем и остаётся только в памяти текущей вкладки.
+
+TikTok и Instagram пока заполняются вручную; OAuth, облачное хранение групп и фоновая синхронизация ещё не реализованы. Демоданные отмечены в интерфейсе и удаляются в настройках.
+
+## GitHub Pages
+
+Источник публикации: ветка `main`, каталог `/ (root)`. При изменении статических файлов Pages публикует новую версию.
+
+## Проверка
+
+```sh
+node --check app.js
+node --test worker.test.mjs
+```
